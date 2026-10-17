@@ -1,0 +1,16 @@
+[package]
+name = "deepvariant-rs-cli"
+description = "Binaire deepvariant-rs : make_examples, call_variants, postprocess_variants, run."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "deepvariant-rs"
+path = "src/main.rs"
+
+[lints]
+workspace = true

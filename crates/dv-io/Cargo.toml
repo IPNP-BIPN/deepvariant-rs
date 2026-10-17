@@ -1,0 +1,12 @@
+[package]
+name = "deepvariant-rs-io"
+description = "BAM/CRAM/FASTA/VCF via rust-htslib, TFRecord et tf.Example octet-identiques a l'oracle."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,12 @@
+[package]
+name = "deepvariant-rs-diff"
+description = "Outils de comparaison a l'oracle : exemples, CVO, VCF."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true

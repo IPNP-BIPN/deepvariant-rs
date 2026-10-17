@@ -1,0 +1,11 @@
+/target
+/target-*
+# Oracle DeepVariant et modeles telecharges (scripts/fetch_oracle.sh), jamais commites
+/reference/
+/models/
+/work/
+/work*/
+.DS_Store
+*.bak
+*.orig
+*~

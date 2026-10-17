@@ -1,0 +1,4 @@
+# Dit quel compilateur la CI utilise, pas lequel vous avez (meme regle que bwa-mem4).
+[toolchain]
+channel = "1.96.1"
+components = ["clippy", "rustfmt"]

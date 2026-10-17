@@ -1,0 +1,12 @@
+[package]
+name = "deepvariant-rs-allele-counter"
+description = "Port de allelecounter.cc : comptage d'alleles par position de reference."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
