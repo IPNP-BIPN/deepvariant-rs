@@ -5,4 +5,5 @@ DV_VERSION="${DV_VERSION:-1.10.0}"
 mkdir -p reference
 [ -d reference/deepvariant ] || git clone --depth 1 --branch "v${DV_VERSION}" \
   https://github.com/google/deepvariant.git reference/deepvariant
-docker pull "google/deepvariant:${DV_VERSION}"
+# SKIP_IMAGE=1 : sources seules (testdata des golden), pour les jobs CI sans Docker.
+[ "${SKIP_IMAGE:-0}" = 1 ] || docker pull "google/deepvariant:${DV_VERSION}"

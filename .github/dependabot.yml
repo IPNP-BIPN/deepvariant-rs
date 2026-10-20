@@ -1,0 +1,31 @@
+# Dependabot pour les deux ecosystemes que ce depot resout : crates.io (Cargo.lock) et les actions
+# de .github/workflows. Hebdomadaire et groupe ; une majeure arrive seule, c'est une decision.
+#
+# Pas d'entree pour l'image google/deepvariant:1.10.0 : c'est l'oracle. La changer invaliderait la
+# comparaison ; elle bouge avec la version visee, jamais autrement. La toolchain Rust non plus :
+# rust-toolchain.toml n'est pas lu par Dependabot, le job guard compare les deux pins.
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    groups:
+      crates:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    groups:
+      actions:
+        update-types: [minor, patch]

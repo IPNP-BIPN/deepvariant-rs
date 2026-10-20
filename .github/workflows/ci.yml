@@ -11,16 +11,148 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Doit egaler rust-toolchain.toml : le job guard le verifie.
   RUST_TOOLCHAIN: "1.96.1"
+  DV_VERSION: "1.10.0"
 
 jobs:
-  build-test:
+  guard:
+    name: Invariants du depot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: LICENSE et README annoncent la meme licence, et la mention non officielle
+        # BSD-3-Clause parce que DeepVariant l'est ; ce port est une oeuvre derivee.
+        run: |
+          grep -q "Redistribution and use in source and binary forms" LICENSE || { echo "LICENSE n'est pas BSD-3-Clause"; exit 1; }
+          grep -q "BSD-3-Clause, comme DeepVariant" README.md || { echo "licence du README changee"; exit 1; }
+          grep -qi "pas un produit Google" README.md || { echo "mention non officielle absente"; exit 1; }
+
+      - name: La CI compile avec la toolchain de rust-toolchain.toml
+        run: grep -q "channel = \"${RUST_TOOLCHAIN}\"" rust-toolchain.toml || { echo "RUST_TOOLCHAIN != rust-toolchain.toml"; exit 1; }
+
+      - name: Pas de tiret cadratin dans les textes (CLAUDE.md)
+        run: |
+          if git grep -n -e "$(printf '\342\200\224')" -- ':!Cargo.lock'; then echo "tiret cadratin trouve"; exit 1; fi
+
+  test:
+    name: Tests ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, ubuntu-24.04-arm, macos-26]
+    env:
+      # Positionne, il rend les tests golden obligatoires : sans lui ils se sautent en silence.
+      DV_ORACLE_DIR: ${{ github.workspace }}/reference/deepvariant
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal -c clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/cache@v6
+        with:
+          path: reference/deepvariant
+          key: dv-oracle-src-${{ env.DV_VERSION }}
+
+      - name: Sources oracle (testdata des golden)
+        run: SKIP_IMAGE=1 ./scripts/fetch_oracle.sh
+
       - run: ./scripts/check.sh
+
+  determinism:
+    name: "Determinisme : autre environnement, builds reproductibles"
+    runs-on: ubuntu-latest
+    env:
+      DV_ORACLE_DIR: ${{ github.workspace }}/reference/deepvariant
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/cache@v6
+        with:
+          path: reference/deepvariant
+          key: dv-oracle-src-${{ env.DV_VERSION }}
+
+      - run: SKIP_IMAGE=1 ./scripts/fetch_oracle.sh
+
+      - name: Les tests passent sous une locale, un fuseau, un TMPDIR et un seul thread etrangers
+        # Toute affirmation ici porte sur des octets : elle doit tenir hors de l'environnement du
+        # runner. fr_FR deplace le separateur decimal d'un formateur sensible a la locale.
+        run: |
+          set -eux
+          mkdir -p /tmp/dv-ailleurs
+          sudo locale-gen fr_FR.UTF-8 || true
+          LC_ALL=fr_FR.UTF-8 LANG=fr_FR.UTF-8 TZ=Asia/Kolkata \
+            TMPDIR=/tmp/dv-ailleurs RUST_TEST_THREADS=1 \
+            cargo test --workspace --release
+
+      - name: Deux builds propres du meme source donnent les memes octets
+        # Un port dont le build n'est pas reproductible ne peut pas l'affirmer de ses sorties.
+        run: |
+          set -eux
+          sum() { find target/release -maxdepth 1 -name 'libdeepvariant_rs_io*.rlib' -exec sha256sum {} \; | sed 's#  .*/#  #'; }
+          cargo build --release -p deepvariant-rs-io
+          sum > /tmp/build1.txt
+          cargo clean
+          cargo build --release -p deepvariant-rs-io
+          sum > /tmp/build2.txt
+          diff /tmp/build1.txt /tmp/build2.txt
+          cat /tmp/build1.txt
+
+  oracle:
+    name: "Oracle : stabilite de make_examples 1.10.0 sur x86 natif (#60)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+      - uses: Swatinem/rust-cache@v2
+
+      - name: CPU de l'hote
+        run: grep -m1 'model name' /proc/cpuinfo; nproc
+
+      - uses: actions/cache@v6
+        with:
+          path: reference/deepvariant
+          key: dv-oracle-src-${{ env.DV_VERSION }}
+
+      - name: Sources et image oracle
+        run: ./scripts/fetch_oracle.sh
+
+      - name: Trois executions de l'oracle, comparees entre elles et au golden
+        # Echoue si dv-diff trouve une difference hors des champs non ordonnes
+        # (crates/dv-diff/src/canonical.rs) ou si le gVCF change d'un octet.
+        run: ./scripts/oracle_stability.sh
+
+      - name: Publier ce que l'oracle a produit
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: oracle-stability
+          path: work/oracle60/
+          if-no-files-found: ignore
+
+  ci:
+    name: CI complete
+    # Le seul contexte que la regle de main exige et qu'attend l'auto-merge. Tourne quoi qu'il
+    # arrive : une barriere sautee quand un job echoue ne bloque rien.
+    needs: [guard, test, determinism, oracle]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tous les jobs ci-dessus ont reussi
+        # Un job saute n'est pas un echec, un job annule si : il n'a rien prouve.
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          results = json.loads(os.environ["RESULTS"])
+          bad = sorted(n for n, j in results.items() if j["result"] not in ("success", "skipped"))
+          for n in bad:
+              print(f"{n}: {results[n]['result']}")
+          print(f"{len(results) - len(bad)}/{len(results)} jobs verts")
+          sys.exit(1 if bad else 0)
+          PY

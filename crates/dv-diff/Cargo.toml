@@ -10,3 +10,10 @@ repository.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+deepvariant-rs-io = { path = "../dv-io" }
+
+[[bin]]
+name = "dv-diff"
+path = "src/main.rs"

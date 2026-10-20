@@ -1,0 +1,67 @@
+# PR de Dependabot mises en file derriere la CI plutot que fusionnees a la main.
+#
+# `--auto` ne veut pas dire "fusionner quand les checks passent" : sur une branche non protegee il
+# fusionne tout de suite. C'est la regle de main exigeant le contexte `CI complete` qui le fait
+# attendre. Sans cette regle, ce fichier devient un tampon.
+#
+# Reste pour un humain toute montee que cargo juge incompatible : sous cargo, 0.x.y casse sur x,
+# donc 0.14 vers 0.15 est incompatible meme si Dependabot l'etiquette MINOR. On compare donc la
+# paire de versions, et `update-type` seulement pour une PR groupee.
+#
+# pull_request_target execute ce fichier tel qu'il est sur main sans extraire la branche testee :
+# le jeton en ecriture n'est jamais donne au code de la PR.
+name: Dependabot auto-merge
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  queue:
+    name: Mettre la montee en file derriere la CI
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - id: metadata
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: policy
+        name: Une suite verte suffit-elle a juger cette montee ?
+        env:
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          PREVIOUS: ${{ steps.metadata.outputs.previous-version }}
+          NEW: ${{ steps.metadata.outputs.new-version }}
+        run: |
+          python3 - <<'PY'
+          import os
+
+          def leading(version):
+              """Composante majeure au sens de cargo : la premiere non nulle, et sa position."""
+              parts = version.split("+")[0].split("-")[0].split(".")
+              for index, part in enumerate(parts):
+                  if part.isdigit() and int(part):
+                      return index, int(part)
+              return len(parts), 0
+
+          previous, new = os.environ["PREVIOUS"], os.environ["NEW"]
+          if previous and new:
+              queue = leading(previous) == leading(new)
+              why = f"{previous} vers {new}"
+          else:
+              queue = os.environ["UPDATE_TYPE"] != "version-update:semver-major"
+              why = f"groupee, {os.environ['UPDATE_TYPE'] or 'sans type'}"
+          print(f"{why} : {'en file derriere la CI' if queue else 'laissee a un humain'}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"queue={'true' if queue else 'false'}\n")
+          PY
+
+      - name: Mettre en file
+        if: steps.policy.outputs.queue == 'true'
+        run: gh pr merge --auto --merge --delete-branch "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

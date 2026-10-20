@@ -10,3 +10,10 @@ repository.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+crc32c = "0.6.8"
+flate2 = "1.1.10"
+
+[dev-dependencies]
+flate2 = "1.1.10"
