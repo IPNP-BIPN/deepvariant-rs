@@ -160,8 +160,11 @@ fn is_gz(path: &Path) -> bool {
 /// Ouvre un TFRecord, decompresse en flux si le chemin finit par `.gz` (convention de DeepVariant).
 pub fn open(path: impl AsRef<Path>) -> io::Result<Reader<Box<dyn Read>>> {
     let path = path.as_ref();
-    let file = BufReader::new(File::open(path)?);
-    let inner: Box<dyn Read> = if is_gz(path) {
+    let file = File::open(path)?;
+    // Un .gz de 0 octet vaut zero enregistrement pour TensorFlow (golden.calling_examples_empty).
+    let empty = file.metadata()?.len() == 0;
+    let file = BufReader::new(file);
+    let inner: Box<dyn Read> = if is_gz(path) && !empty {
         Box::new(BufReader::new(MultiGzDecoder::new(file)))
     } else {
         Box::new(file)

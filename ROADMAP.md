@@ -79,3 +79,12 @@ Une phase = un jalon GitHub. Cible d'acceptation : sorties **octet-identiques** 
 - #49 DeepSomatic : tumeur/normal et tumeur seule
 - #50 Pangenome-aware DeepVariant (GBZ)
 - #51 decision : l'entrainement et les labelers restent en Python/TensorFlow
+
+## Journal des mesures
+
+- 2026-10-20, #60/#93 : les 1 083 exemples des 12 golden `*examples*.tfrecord.gz` de `testdata`
+  (v1.10.0) presentent **679 ordres de cles distincts** dans la map `features`. L'ordre est donc
+  tire par protobuf C++ a chaque exemple, pas fixe. Consequence : l'octet-identite de l'exemple
+  entier n'est pas atteignable ; le critere de make_examples doit etre feature par feature
+  (`crates/dv-io/tests/example_oracle.rs`). Chaque exemple se reencode a l'identique quand on
+  conserve l'ordre lu, ce qui valide l'encodeur pour tout le reste (packing, longueurs, oneof).
