@@ -51,6 +51,9 @@ version = "0.1.0"
 [[package]]
 name = "deepvariant-rs-diff"
 version = "0.1.0"
+dependencies = [
+ "deepvariant-rs-io",
+]
 
 [[package]]
 name = "deepvariant-rs-gpu"

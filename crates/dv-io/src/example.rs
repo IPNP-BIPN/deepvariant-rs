@@ -1,7 +1,7 @@
 //! `tf.Example` encode et decode a la main, ordre des cles conserve : protobuf C++ serialise la
 //! `map<string, Feature>` dans l'ordre de sa table de hachage, qu'on doit pouvoir reproduire.
 
-use std::fmt;
+use crate::wire::{put_len, put_varint, Cursor, DecodeError, Result};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Feature {
@@ -14,69 +14,6 @@ pub enum Feature {
 pub struct Example {
     /// Dans l'ordre du flux.
     pub features: Vec<(String, Feature)>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct DecodeError(&'static str);
-
-impl fmt::Display for DecodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "tf.Example : {}", self.0)
-    }
-}
-
-impl std::error::Error for DecodeError {}
-
-type Result<T> = std::result::Result<T, DecodeError>;
-
-struct Cursor<'a>(&'a [u8]);
-
-impl<'a> Cursor<'a> {
-    fn varint(&mut self) -> Result<u64> {
-        let mut v = 0u64;
-        for shift in (0..64).step_by(7) {
-            let (&b, rest) = self.0.split_first().ok_or(DecodeError("varint tronque"))?;
-            self.0 = rest;
-            v |= u64::from(b & 0x7f) << shift;
-            if b < 0x80 {
-                return Ok(v);
-            }
-        }
-        Err(DecodeError("varint trop long"))
-    }
-
-    fn take(&mut self, n: usize) -> Result<&'a [u8]> {
-        if n > self.0.len() {
-            return Err(DecodeError("champ tronque"));
-        }
-        let (head, rest) = self.0.split_at(n);
-        self.0 = rest;
-        Ok(head)
-    }
-
-    fn len_delimited(&mut self) -> Result<&'a [u8]> {
-        let n = usize::try_from(self.varint()?).map_err(|_| DecodeError("longueur"))?;
-        self.take(n)
-    }
-
-    /// `(numero, type)` du prochain champ, `None` en fin de message.
-    fn tag(&mut self) -> Result<Option<(u64, u8)>> {
-        if self.0.is_empty() {
-            return Ok(None);
-        }
-        let t = self.varint()?;
-        Ok(Some((t >> 3, (t & 7) as u8)))
-    }
-
-    fn skip(&mut self, wire: u8) -> Result<()> {
-        match wire {
-            0 => self.varint().map(drop),
-            1 => self.take(8).map(drop),
-            2 => self.len_delimited().map(drop),
-            5 => self.take(4).map(drop),
-            _ => Err(DecodeError("type de champ inconnu")),
-        }
-    }
 }
 
 fn decode_feature(buf: &[u8]) -> Result<Feature> {
@@ -254,20 +191,6 @@ impl Example {
     pub fn label(&self) -> Option<i64> {
         self.int64s("label")?.first().copied()
     }
-}
-
-fn put_varint(out: &mut Vec<u8>, mut v: u64) {
-    while v >= 0x80 {
-        out.push(v as u8 | 0x80);
-        v >>= 7;
-    }
-    out.push(v as u8);
-}
-
-fn put_len(out: &mut Vec<u8>, field: u64, data: &[u8]) {
-    put_varint(out, field << 3 | 2);
-    put_varint(out, data.len() as u64);
-    out.extend_from_slice(data);
 }
 
 #[cfg(test)]

@@ -2,3 +2,4 @@
 
 pub mod example;
 pub mod tfrecord;
+pub mod wire;

@@ -88,3 +88,14 @@ Une phase = un jalon GitHub. Cible d'acceptation : sorties **octet-identiques** 
   entier n'est pas atteignable ; le critere de make_examples doit etre feature par feature
   (`crates/dv-io/tests/example_oracle.rs`). Chaque exemple se reencode a l'identique quand on
   conserve l'ordre lu, ce qui valide l'encodeur pour tout le reste (packing, longueurs, oneof).
+- 2026-10-20, #60 : la commande golden `calling` de `create_golden.sh` lancee 3 fois dans
+  `google/deepvariant:1.10.0` (amd64 emule sur Apple Silicon, `scripts/oracle_stability.sh`).
+  Les 84 exemples ne sont **jamais** identiques octet par octet entre deux executions, malgre
+  `--deterministic_serialization` : ce drapeau ne touche que les protos serialises en Python, les
+  exemples le sont en C++ (`make_examples_native.cc:471`). Une fois trie ce qui sort d'une map,
+  les 3 executions et le golden sont identiques : 84/84 exemples, 78/78 candidats. Les champs non
+  ordonnes sont la map `features` de l'exemple, `info` de `Variant` et `VariantCall`, et dans
+  `DeepVariantCall` les maps 2, 3, 5, 7, 10 plus `read_names`, `read_infos`, `ref_support` et
+  `ref_support_ext`, remplis en parcourant la map `read_alleles` (`variant_calling.cc:686`). Le
+  gVCF est stable octet par octet. Critere propose pour #93 : egalite sous la forme canonique de
+  `dv-diff` (`crates/dv-diff/src/canonical.rs`). Non mesure : une deuxieme machine (x86 natif).
